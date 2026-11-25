@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #fafafa;
+    color: #111827;
+  }
+
+  .font-mono-timer {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+
+  .app-no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Ultra-minimal scrollbar */
+  .minimal-scroll::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .minimal-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .minimal-scroll::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 9999px;
+  }
+  .minimal-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  /* Sleek minimal range slider */
+  .minimal-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 3px;
+    border-radius: 9999px;
+    background: #e5e5e5;
+    outline: none;
+  }
+  .minimal-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 9999px;
+    background: #171717;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+  }
+  .minimal-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  .minimal-slider-light {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 2.5px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.25);
+    outline: none;
+  }
+  .minimal-slider-light::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+  }
+  .minimal-slider-light::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+}

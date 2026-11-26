@@ -48,8 +48,14 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
   return (
     <div className="relative flex h-screen w-screen items-center justify-between gap-3 bg-[#FAFAFA] px-4 text-neutral-900 select-none">
       {/* Left: Mini Precision Watch Dial + Time */}
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="relative flex h-[42px] w-[42px] shrink-0 items-center justify-center">
+      <div
+        onClick={status === 'completed' ? reset : undefined}
+        title={status === 'completed' ? 'Click to stop alarm' : undefined}
+        className={`flex min-w-0 items-center gap-3 ${
+          status === 'completed' ? 'cursor-pointer' : ''
+        }`}
+      >
+        <div className="relative flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full bg-white shadow-xs ring-1 ring-neutral-200/80">
           {/* Subtle ripple when completed */}
           {status === 'completed' && (
             <motion.span
@@ -160,31 +166,33 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
           <span className="font-mono-timer text-[26px] leading-none font-medium tracking-tight text-neutral-900">
             {formattedTime}
           </span>
-          <span
-            className={`mt-1 truncate text-[10px] leading-none font-medium tracking-[0.12em] uppercase ${
-              status === 'completed' ? 'text-neutral-900' : 'text-neutral-400'
-            }`}
-          >
-            {subtitle}
-          </span>
+          {status === 'completed' ? (
+            <span className="mt-1 inline-flex w-fit items-center rounded-full bg-neutral-900 px-2 py-0.5 text-[9px] leading-none font-semibold tracking-[0.12em] text-white uppercase">
+              {subtitle}
+            </span>
+          ) : (
+            <span className="mt-1 truncate text-[10px] leading-none font-medium tracking-[0.12em] text-neutral-400 uppercase">
+              {subtitle}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Right: Tactile Minimal Controls */}
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2">
         {status === 'completed' ? (
           <>
             <motion.button
               type="button"
               onClick={reset}
-              whileHover={{ scale: 1.07 }}
-              whileTap={{ scale: 0.9 }}
-              animate={{ scale: [1, 1.06, 1] }}
+              whileHover={{ scale: 1.07, y: -1 }}
+              whileTap={{ scale: 0.91, y: 1 }}
+              animate={{ scale: [1, 1.05, 1] }}
               transition={{
                 scale: { repeat: Infinity, duration: 1.1, ease: 'easeInOut' },
                 default: { type: 'spring', stiffness: 450, damping: 24 },
               }}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-colors hover:bg-neutral-800"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-all hover:bg-neutral-700 hover:shadow-md"
               title="Stop Alarm"
             >
               <BellOff className="h-4 w-4" />
@@ -192,10 +200,10 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
             <motion.button
               type="button"
               onClick={startOrResume}
-              whileHover={{ scale: 1.07 }}
-              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.07, y: -1 }}
+              whileTap={{ scale: 0.91, y: 1 }}
               transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 shadow-2xs transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-all hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 hover:shadow-sm"
               title="Restart"
             >
               <Play className="h-3.5 w-3.5 translate-x-[0.5px]" />
@@ -207,10 +215,10 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
               <motion.button
                 type="button"
                 onClick={pause}
-                whileHover={{ scale: 1.07 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={{ scale: 1.07, y: -1 }}
+                whileTap={{ scale: 0.91, y: 1 }}
                 transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-colors hover:bg-neutral-800"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-all hover:bg-neutral-700 hover:shadow-md"
                 title="Pause"
               >
                 <Pause className="h-4 w-4" />
@@ -219,10 +227,10 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
               <motion.button
                 type="button"
                 onClick={startOrResume}
-                whileHover={{ scale: 1.07 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={{ scale: 1.07, y: -1 }}
+                whileTap={{ scale: 0.91, y: 1 }}
                 transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-colors hover:bg-neutral-800"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-neutral-900 text-white shadow-sm transition-all hover:bg-neutral-700 hover:shadow-md"
                 title="Start"
               >
                 <Play className="h-4 w-4 translate-x-[0.5px]" />
@@ -233,10 +241,10 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
               <motion.button
                 type="button"
                 onClick={() => completeCurrentSession(true)}
-                whileHover={{ scale: 1.07 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={{ scale: 1.07, y: -1 }}
+                whileTap={{ scale: 0.91, y: 1 }}
                 transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 shadow-2xs transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-all hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 hover:shadow-sm"
                 title="Finish session"
               >
                 <Check className="h-4 w-4" />
@@ -245,10 +253,10 @@ export function FloatingPipView({ onClosePip: _onClosePip }: FloatingPipViewProp
               <motion.button
                 type="button"
                 onClick={reset}
-                whileHover={{ scale: 1.07 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={{ scale: 1.07, y: -1 }}
+                whileTap={{ scale: 0.91, y: 1 }}
                 transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-2xs transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-all hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 hover:shadow-sm"
                 title="Reset"
               >
                 <RotateCcw className="h-3.5 w-3.5" />

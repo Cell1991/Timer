@@ -1,6 +1,20 @@
 import type { AmbientSoundId } from './ambientCatalog';
 
-export type TimerMode = 'focus' | 'short_break' | 'long_break' | 'flow';
+export type TimerMode =
+  | 'focus'
+  | 'short_break'
+  | 'long_break'
+  | 'flow'
+  | 'pomodoro'
+  | 'interval'
+  | 'sleep';
+
+export interface LapRecord {
+  id: string;
+  lapNumber: number;
+  splitMs: number;
+  totalMs: number;
+}
 
 export type TimerStatus = 'idle' | 'running' | 'paused' | 'completed';
 

@@ -37,7 +37,6 @@ function formatMixSummary(mix: Partial<Record<AmbientSoundId, number>>): string 
 export function AmbientBar() {
   const preferences = useTimerStore((s) => s.preferences);
   const soundPresets = useTimerStore((s) => s.soundPresets);
-  const dbConnected = useTimerStore((s) => s.dbConnected);
   const toggleAmbientSound = useTimerStore((s) => s.toggleAmbientSound);
   const setAmbientSoundVolume = useTimerStore((s) => s.setAmbientSoundVolume);
   const toggleAmbientMute = useTimerStore((s) => s.toggleAmbientMute);
@@ -148,16 +147,6 @@ export function AmbientBar() {
                     <span className="text-sm font-medium tracking-tight text-neutral-900">
                       Soundscape
                     </span>
-                    <span
-                      title={
-                        dbConnected
-                          ? 'Synced with MongoDB'
-                          : 'Using local storage (MongoDB offline)'
-                      }
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        dbConnected ? 'bg-emerald-500' : 'bg-neutral-300'
-                      }`}
-                    />
                     {hasActiveSounds && (
                       <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 tabular-nums">
                         {activeEntries.length}

@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, globalShortcut } = require('electron');
 const path = require('path');
 
-const DEV_URL = 'http://localhost:5001';
+const DEV_URL = 'http://localhost:5002';
 const isDev = !app.isPackaged;
 
 let mainWindow = null;

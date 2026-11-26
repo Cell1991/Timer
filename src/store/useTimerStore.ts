@@ -12,6 +12,7 @@ import type {
   AmbientPreset,
   InterruptionReason,
   InterruptionEvent,
+  LapRecord,
   SessionRecord,
   SoundPresetRecord,
   TaskItem,
@@ -32,11 +33,16 @@ export function getPlannedSecondsForMode(
 ): number {
   switch (mode) {
     case 'focus':
+    case 'pomodoro':
       return prefs.focusMinutes * 60;
     case 'short_break':
       return prefs.shortBreakMinutes * 60;
     case 'long_break':
       return prefs.longBreakMinutes * 60;
+    case 'interval':
+      return 45; // default 45s work sprint
+    case 'sleep':
+      return 30 * 60; // default 30m sleep timer
     case 'flow':
       return 0; // open-ended stopwatch
   }
@@ -75,6 +81,9 @@ function createAllModeStates(
     short_break: createInitialModeState('short_break', prefs),
     long_break: createInitialModeState('long_break', prefs),
     flow: createInitialModeState('flow', prefs),
+    pomodoro: createInitialModeState('pomodoro', prefs),
+    interval: createInitialModeState('interval', prefs),
+    sleep: createInitialModeState('sleep', prefs),
   };
 }
 
@@ -103,6 +112,16 @@ interface TimerState {
   soundPresets: SoundPresetRecord[];
   dbConnected: boolean;
 
+  // Mode-specific state
+  pomodoroPhase: 'focus' | 'short_break' | 'long_break';
+  pomodoroRound: number;
+  intervalPhase: 'work' | 'rest';
+  intervalRound: number;
+  intervalTotalRounds: number;
+  intervalWorkSeconds: number;
+  intervalRestSeconds: number;
+  laps: LapRecord[];
+
   // Hydration
   hydrateFromServer: () => Promise<void>;
 
@@ -116,6 +135,11 @@ interface TimerState {
   completeCurrentSession: (completedNormally: boolean) => void;
   completeSessionForMode: (mode: TimerMode, completedNormally: boolean) => void;
   logInterruption: (reason: InterruptionReason, note?: string) => void;
+
+  // Mode-specific actions
+  setIntervalConfig: (workSec: number, restSec: number, rounds: number) => void;
+  recordLap: () => void;
+  clearLaps: () => void;
 
   // Tasks
   addTask: (title: string, estimatedMinutes?: number) => TaskItem;
@@ -137,6 +161,32 @@ interface TimerState {
 const initialPrefs = repository.getPreferences() ?? DEFAULT_PREFERENCES;
 const initialModeStates = createAllModeStates(initialPrefs);
 
+function getNextPomodoroTransition(
+  phase: 'focus' | 'short_break' | 'long_break',
+  round: number,
+  prefs: TimerPreferences,
+): {
+  nextPhase: 'focus' | 'short_break' | 'long_break';
+  nextRound: number;
+  nextSeconds: number;
+} {
+  let nextPhase: 'focus' | 'short_break' | 'long_break' = 'focus';
+  let nextRound = round;
+  if (phase === 'focus') {
+    nextPhase = round >= 4 ? 'long_break' : 'short_break';
+  } else {
+    nextPhase = 'focus';
+    nextRound = round >= 4 ? 1 : round + 1;
+  }
+  const nextSeconds =
+    nextPhase === 'focus'
+      ? prefs.focusMinutes * 60
+      : nextPhase === 'long_break'
+        ? prefs.longBreakMinutes * 60
+        : prefs.shortBreakMinutes * 60;
+  return { nextPhase, nextRound, nextSeconds };
+}
+
 export const useTimerStore = create<TimerState>((set, get) => ({
   mode: 'focus',
   ...initialModeStates.focus,
@@ -149,6 +199,15 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   preferences: initialPrefs,
   soundPresets: [],
   dbConnected: false,
+
+  pomodoroPhase: 'focus',
+  pomodoroRound: 1,
+  intervalPhase: 'work',
+  intervalRound: 1,
+  intervalTotalRounds: 8,
+  intervalWorkSeconds: 45,
+  intervalRestSeconds: 15,
+  laps: [],
 
   hydrateFromServer: async () => {
     const data = await apiClient.bootstrap();
@@ -261,12 +320,25 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     if (state.status === 'idle' || state.status === 'completed') {
       const sessionId = createId('ses');
-      const plannedSeconds =
+      let nextPomodoroPhase = state.pomodoroPhase;
+      let nextPomodoroRound = state.pomodoroRound;
+      let plannedSeconds =
         state.mode === 'flow'
           ? 0
           : state.plannedSeconds > 0
             ? state.plannedSeconds
             : getPlannedSecondsForMode(state.mode, state.preferences);
+
+      if (state.status === 'completed' && state.mode === 'pomodoro') {
+        const next = getNextPomodoroTransition(
+          state.pomodoroPhase,
+          state.pomodoroRound,
+          state.preferences,
+        );
+        nextPomodoroPhase = next.nextPhase;
+        nextPomodoroRound = next.nextRound;
+        plannedSeconds = next.nextSeconds;
+      }
 
       const nextModeState: ModeTimerState = {
         status: 'running',
@@ -280,6 +352,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
       set({
         ...nextModeState,
+        ...(state.mode === 'pomodoro'
+          ? { pomodoroPhase: nextPomodoroPhase, pomodoroRound: nextPomodoroRound }
+          : {}),
         modeStates: {
           ...state.modeStates,
           [state.mode]: nextModeState,
@@ -374,12 +449,41 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   reset: () => {
     soundEngine.stopCompletionAlarm();
     const state = get();
+
+    // If stopping alarm after a completed Pomodoro phase, cue up the next phase in idle state
+    if (state.status === 'completed' && state.mode === 'pomodoro') {
+      const next = getNextPomodoroTransition(
+        state.pomodoroPhase,
+        state.pomodoroRound,
+        state.preferences,
+      );
+      const nextIdleState: ModeTimerState = {
+        ...createInitialModeState('pomodoro', state.preferences),
+        plannedSeconds: next.nextSeconds,
+      };
+      set({
+        ...nextIdleState,
+        pomodoroPhase: next.nextPhase,
+        pomodoroRound: next.nextRound,
+        modeStates: { ...state.modeStates, pomodoro: nextIdleState },
+      });
+      eventBus.emit('timer:reset', {
+        mode: state.mode,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
     const preservedPlanned =
       state.mode === 'flow'
         ? 0
-        : state.plannedSeconds > 0
-          ? state.plannedSeconds
-          : getPlannedSecondsForMode(state.mode, state.preferences);
+        : state.mode === 'pomodoro'
+          ? state.preferences.focusMinutes * 60
+          : state.mode === 'interval'
+            ? state.intervalWorkSeconds
+            : state.plannedSeconds > 0
+              ? state.plannedSeconds
+              : getPlannedSecondsForMode(state.mode, state.preferences);
     const resetState: ModeTimerState = {
       ...createInitialModeState(state.mode, state.preferences),
       plannedSeconds: preservedPlanned,
@@ -392,12 +496,69 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     set({
       ...resetState,
       modeStates: nextModeStates,
+      ...(state.mode === 'pomodoro'
+        ? { pomodoroPhase: 'focus', pomodoroRound: 1 }
+        : {}),
+      ...(state.mode === 'interval'
+        ? { intervalPhase: 'work', intervalRound: 1 }
+        : {}),
+      ...(state.mode === 'flow' ? { laps: [] } : {}),
     });
 
     eventBus.emit('timer:reset', {
       mode: state.mode,
       timestamp: Date.now(),
     });
+  },
+
+  setIntervalConfig: (workSec, restSec, rounds) => {
+    const state = get();
+    const w = Math.max(5, Math.min(3600, Math.round(workSec)));
+    const r = Math.max(5, Math.min(1800, Math.round(restSec)));
+    const total = Math.max(1, Math.min(30, Math.round(rounds)));
+    const isIntervalIdle = state.mode === 'interval' && state.status === 'idle';
+    set({
+      intervalWorkSeconds: w,
+      intervalRestSeconds: r,
+      intervalTotalRounds: total,
+      ...(isIntervalIdle
+        ? {
+            plannedSeconds: w,
+            intervalPhase: 'work',
+            intervalRound: 1,
+            modeStates: {
+              ...state.modeStates,
+              interval: {
+                ...state.modeStates.interval,
+                plannedSeconds: w,
+              },
+            },
+          }
+        : {}),
+    });
+  },
+
+  recordLap: () => {
+    const state = get();
+    if (state.mode !== 'flow') return;
+    const snap = computeClockSnapshot({
+      plannedSeconds: 0,
+      accumulatedMs: state.accumulatedMs,
+      lastResumedAt: state.lastResumedAt,
+    });
+    const totalMs = snap.elapsedMs;
+    const prevTotal = state.laps[0]?.totalMs ?? 0;
+    const lap: LapRecord = {
+      id: createId('lap'),
+      lapNumber: state.laps.length + 1,
+      splitMs: Math.max(0, totalMs - prevTotal),
+      totalMs,
+    };
+    set({ laps: [lap, ...state.laps] });
+  },
+
+  clearLaps: () => {
+    set({ laps: [] });
   },
 
   completeCurrentSession: (completedNormally) => {
@@ -441,10 +602,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       [targetMode]: completedModeState,
     };
 
-    if (completedNormally && state.preferences.soundCueEnabled) {
-      soundEngine.startCompletionAlarm(targetMode);
-    }
-
     const actualSeconds = Math.max(1, Math.round(snap.elapsedMs / 1000));
     const record: SessionRecord = {
       id: targetState.activeSessionId ?? createId('ses'),
@@ -464,6 +621,71 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     repository.saveSession(record);
     void apiClient.saveSession(record);
     const updatedSessions = repository.getSessions();
+
+    // Auto-cycle for Interval
+    if (completedNormally && targetMode === 'interval') {
+      const hasMore =
+        state.intervalPhase === 'work' ||
+        state.intervalRound < state.intervalTotalRounds;
+      if (hasMore) {
+        if (state.preferences.soundCueEnabled) {
+          soundEngine.playCompletionChime(
+            state.intervalPhase === 'work' ? 'short_break' : 'focus',
+          );
+        }
+        const nextPhase = state.intervalPhase === 'work' ? 'rest' : 'work';
+        const nextRound =
+          state.intervalPhase === 'rest'
+            ? state.intervalRound + 1
+            : state.intervalRound;
+        const nextSeconds =
+          nextPhase === 'work'
+            ? state.intervalWorkSeconds
+            : state.intervalRestSeconds;
+
+        const autoState: ModeTimerState = {
+          status: 'running',
+          plannedSeconds: nextSeconds,
+          accumulatedMs: 0,
+          lastResumedAt: now,
+          activeSessionId: createId('ses'),
+          sessionStartedAt: now,
+          interruptions: [],
+        };
+        set({
+          sessions: updatedSessions,
+          intervalPhase: nextPhase,
+          intervalRound: nextRound,
+          modeStates: { ...state.modeStates, interval: autoState },
+          ...(state.mode === 'interval' ? autoState : {}),
+        });
+        eventBus.emit('timer:completed', { session: record });
+        return;
+      }
+    }
+
+    // Sleep mode: fade out soundscape silently (no wake-up alarm!)
+    if (completedNormally && targetMode === 'sleep') {
+      const mutedPrefs: TimerPreferences = {
+        ...state.preferences,
+        ambientMuted: true,
+      };
+      repository.savePreferences(mutedPrefs);
+      void apiClient.savePreferences(mutedPrefs);
+      soundEngine.syncMix(mutedPrefs.ambientMix, true, mutedPrefs.ambientVolume);
+      set({
+        preferences: mutedPrefs,
+        sessions: updatedSessions,
+        modeStates: nextModeStates,
+        ...(targetMode === state.mode ? completedModeState : {}),
+      });
+      eventBus.emit('timer:completed', { session: record });
+      return;
+    }
+
+    if (completedNormally && state.preferences.soundCueEnabled) {
+      soundEngine.startCompletionAlarm(targetMode);
+    }
 
     set({
       sessions: updatedSessions,

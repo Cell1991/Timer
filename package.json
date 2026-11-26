@@ -8,7 +8,7 @@
     "dev": "concurrently -k -n api,web \"node server/index.mjs\" \"vite\"",
     "dev:web": "vite",
     "dev:server": "node server/index.mjs",
-    "dev:electron": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5001 && electron .\"",
+    "dev:electron": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5002 && electron .\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"

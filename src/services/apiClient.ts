@@ -14,7 +14,7 @@ export interface BootstrapPayload {
 
 const API_BASE =
   typeof window !== 'undefined' && window.location.protocol === 'file:'
-    ? 'http://localhost:5002/api'
+    ? 'http://localhost:5102/api'
     : '/api';
 
 async function safeFetch<T>(

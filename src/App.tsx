@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
-import { BarChart3 } from 'lucide-react';
 import { AmbientBar } from './components/AmbientBar';
 import { FloatingPipView } from './components/FloatingPipView';
-import { InsightsDrawer } from './components/InsightsDrawer';
 import { ModeSelector } from './components/ModeSelector';
 import { TimoLogo } from './components/TimoLogo';
 import { TimerDisplay } from './components/TimerDisplay';
@@ -24,7 +21,6 @@ export function App() {
 
   const [pipHandle, setPipHandle] = useState<FloatingWindowHandle | null>(null);
   const [desktopWidgetOpen, setDesktopWidgetOpen] = useState(false);
-  const [insightsOpen, setInsightsOpen] = useState(false);
 
   const desktopMode = isDesktopApp();
   const isFloatingOpen = desktopMode ? desktopWidgetOpen : Boolean(pipHandle);
@@ -97,31 +93,13 @@ export function App() {
 
       {/* Main Content Area */}
       <div className="flex min-h-screen flex-1 flex-col justify-between px-6 py-6">
-        {/* Minimal Header / Navbar */}
-        <header className="mx-auto grid w-full max-w-5xl grid-cols-2 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-          <div className="flex items-center justify-self-start pl-3 sm:pl-5">
-            <TimoLogo />
-          </div>
-
-          <div className="col-span-2 order-last justify-self-center sm:col-span-1 sm:order-none">
-            <ModeSelector />
-          </div>
-
-          <motion.button
-            type="button"
-            onClick={() => setInsightsOpen(true)}
-            whileHover={{ scale: 1.04, y: -1 }}
-            whileTap={{ scale: 0.93, y: 1 }}
-            transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-            className="flex cursor-pointer items-center gap-2 justify-self-end rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 shadow-xs transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900"
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span>Log</span>
-          </motion.button>
+        {/* Minimal Centered Mode Selector */}
+        <header className="mx-auto flex w-full justify-center">
+          <ModeSelector />
         </header>
 
         {/* Main Centered Workspace */}
-        <main className="mx-auto my-auto flex w-full max-w-md flex-col items-center gap-8 py-6">
+        <main className="mx-auto my-auto flex w-full max-w-xl flex-col items-center gap-6 py-4">
           <TimerDisplay
             isPipOpen={isFloatingOpen}
             onStart={startOrResume}
@@ -133,11 +111,10 @@ export function App() {
         <div className="h-10" aria-hidden="true" />
       </div>
 
-      {/* Log & Insights Drawer */}
-      <InsightsDrawer
-        open={insightsOpen}
-        onClose={() => setInsightsOpen(false)}
-      />
+      {/* Subtle Bottom-Right Brand Watermark */}
+      <div className="fixed right-6 bottom-5 z-10">
+        <TimoLogo className="opacity-25 transition-opacity duration-300 hover:opacity-75" />
+      </div>
 
       {/* Portal into Web Floating PiP / Popup Window */}
       {pipHandle &&

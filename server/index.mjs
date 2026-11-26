@@ -9,7 +9,7 @@ import {
   TaskModel,
 } from './models.mjs';
 
-const PORT = Number(process.env.PORT || 5002);
+const PORT = Number(process.env.PORT || 5102);
 const MONGODB_URI =
   process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/tempo_timer';
 

@@ -24,7 +24,15 @@ const SessionSchema = new mongoose.Schema(
     id: { type: String, required: true, unique: true, index: true },
     mode: {
       type: String,
-      enum: ['focus', 'short_break', 'long_break', 'flow'],
+      enum: [
+        'focus',
+        'short_break',
+        'long_break',
+        'flow',
+        'pomodoro',
+        'interval',
+        'sleep',
+      ],
       required: true,
     },
     taskId: { type: String },

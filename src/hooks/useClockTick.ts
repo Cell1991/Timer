@@ -5,6 +5,7 @@ import {
   formatStopwatchMs,
   type ClockSnapshot,
 } from '../core/clock';
+import { soundEngine } from '../services/soundEngine';
 import { useTimerStore } from '../store/useTimerStore';
 
 /**
@@ -77,6 +78,19 @@ export function useClockTick(): {
         completeCurrentSession(true);
         return;
       }
+      if (
+        useTimerStore.getState().mode === 'sleep' &&
+        snap.remainingMs <= 30_000 &&
+        snap.remainingMs > 0
+      ) {
+        const prefs = useTimerStore.getState().preferences;
+        const ratio = Math.max(0.02, snap.remainingMs / 30_000);
+        soundEngine.syncMix(
+          prefs.ambientMix,
+          prefs.ambientMuted,
+          prefs.ambientVolume * ratio,
+        );
+      }
 
       setNow(current);
 
@@ -115,6 +129,19 @@ export function useClockTick(): {
       if (snap.isFinished && plannedSeconds > 0) {
         completeCurrentSession(true);
         return;
+      }
+      if (
+        useTimerStore.getState().mode === 'sleep' &&
+        snap.remainingMs <= 30_000 &&
+        snap.remainingMs > 0
+      ) {
+        const prefs = useTimerStore.getState().preferences;
+        const ratio = Math.max(0.02, snap.remainingMs / 30_000);
+        soundEngine.syncMix(
+          prefs.ambientMix,
+          prefs.ambientMuted,
+          prefs.ambientVolume * ratio,
+        );
       }
       if (document.visibilityState === 'hidden') {
         setNow(current);

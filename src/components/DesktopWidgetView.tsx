@@ -18,6 +18,9 @@ const MODE_RING: Record<TimerMode, { stroke: string; dot: string }> = {
   short_break: { stroke: 'stroke-emerald-600', dot: 'bg-emerald-600' },
   long_break: { stroke: 'stroke-sky-600', dot: 'bg-sky-600' },
   flow: { stroke: 'stroke-amber-500', dot: 'bg-amber-500' },
+  pomodoro: { stroke: 'stroke-neutral-900', dot: 'bg-neutral-900' },
+  interval: { stroke: 'stroke-amber-500', dot: 'bg-amber-500' },
+  sleep: { stroke: 'stroke-indigo-500', dot: 'bg-indigo-500' },
 };
 
 export function DesktopWidgetView() {

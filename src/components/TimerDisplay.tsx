@@ -4,6 +4,7 @@ import {
   BellOff,
   BellRing,
   Check,
+  Flag,
   Minus,
   Pause,
   PictureInPicture2,
@@ -11,7 +12,11 @@ import {
   Plus,
   RotateCcw,
 } from 'lucide-react';
-import { formatDurationMs, parseDurationInput } from '../core/clock';
+import {
+  formatDurationMs,
+  formatStopwatchMs,
+  parseDurationInput,
+} from '../core/clock';
 import type { TimerMode } from '../core/types';
 import { useClockTick } from '../hooks/useClockTick';
 import { useTimerStore } from '../store/useTimerStore';
@@ -21,6 +26,9 @@ const RING_ACCENT: Record<TimerMode, { stroke: string; dot: string }> = {
   short_break: { stroke: 'stroke-emerald-600', dot: 'bg-emerald-600' },
   long_break: { stroke: 'stroke-sky-600', dot: 'bg-sky-600' },
   flow: { stroke: 'stroke-neutral-900', dot: 'bg-neutral-900' },
+  pomodoro: { stroke: 'stroke-neutral-900', dot: 'bg-neutral-900' },
+  interval: { stroke: 'stroke-amber-500', dot: 'bg-amber-500' },
+  sleep: { stroke: 'stroke-indigo-500', dot: 'bg-indigo-500' },
 };
 
 interface TimerDisplayProps {
@@ -37,6 +45,15 @@ export function TimerDisplay({
   const mode = useTimerStore((s) => s.mode);
   const status = useTimerStore((s) => s.status);
   const plannedSeconds = useTimerStore((s) => s.plannedSeconds);
+  const preferences = useTimerStore((s) => s.preferences);
+  const pomodoroPhase = useTimerStore((s) => s.pomodoroPhase);
+  const pomodoroRound = useTimerStore((s) => s.pomodoroRound);
+  const intervalPhase = useTimerStore((s) => s.intervalPhase);
+  const intervalRound = useTimerStore((s) => s.intervalRound);
+  const intervalTotalRounds = useTimerStore((s) => s.intervalTotalRounds);
+  const intervalWorkSeconds = useTimerStore((s) => s.intervalWorkSeconds);
+  const intervalRestSeconds = useTimerStore((s) => s.intervalRestSeconds);
+  const laps = useTimerStore((s) => s.laps);
 
   const pause = useTimerStore((s) => s.pause);
   const reset = useTimerStore((s) => s.reset);
@@ -45,6 +62,8 @@ export function TimerDisplay({
   const setCustomDurationSeconds = useTimerStore(
     (s) => s.setCustomDurationSeconds,
   );
+  const setIntervalConfig = useTimerStore((s) => s.setIntervalConfig);
+  const recordLap = useTimerStore((s) => s.recordLap);
   const updatePreferences = useTimerStore((s) => s.updatePreferences);
 
   const { snapshot, formattedTime } = useClockTick();
@@ -106,17 +125,128 @@ export function TimerDisplay({
     }
     const currentMin = Math.round(plannedSeconds / 60);
     const nextMin = Math.max(1, Math.min(120, currentMin + delta));
-    if (mode === 'focus') updatePreferences({ focusMinutes: nextMin });
+    if (mode === 'focus') {
+      updatePreferences({ focusMinutes: nextMin });
+    } else if (mode === 'pomodoro') {
+      if (pomodoroPhase === 'focus') updatePreferences({ focusMinutes: nextMin });
+      else if (pomodoroPhase === 'short_break') updatePreferences({ shortBreakMinutes: nextMin });
+      else updatePreferences({ longBreakMinutes: nextMin });
+    }
     setMode(mode, nextMin);
   };
 
-  const accent = RING_ACCENT[mode];
+  const accent =
+    mode === 'pomodoro' && pomodoroPhase !== 'focus'
+      ? RING_ACCENT[pomodoroPhase]
+      : mode === 'interval' && intervalPhase === 'rest'
+        ? RING_ACCENT.short_break
+        : RING_ACCENT[mode];
+
+  const modeBadgeLabel =
+    mode === 'pomodoro'
+      ? `${pomodoroPhase === 'focus' ? 'FOCUS' : pomodoroPhase === 'long_break' ? 'LONG BREAK' : 'BREAK'} · ${pomodoroRound}/4`
+      : mode === 'interval'
+        ? `${intervalPhase === 'work' ? 'WORK' : 'REST'} · ${intervalRound}/${intervalTotalRounds}`
+        : mode === 'sleep'
+          ? 'SLEEP · FADE OUT'
+          : mode === 'flow'
+            ? 'STOPWATCH'
+            : 'TIMER';
+
   const tickAngles = Array.from({ length: 60 }, (_, i) => i * 6);
 
   return (
     <div className="flex flex-col items-center gap-8">
+      {/* Pomodoro Focus / Break / Long Durations above the clock */}
+      {mode === 'pomodoro' && status === 'idle' && (
+        <div className="inline-flex items-center divide-x divide-neutral-200/80 whitespace-nowrap text-xs">
+          {[
+            {
+              label: 'Focus',
+              value: preferences.focusMinutes,
+              min: 1,
+              max: 120,
+              step: 5,
+              onChange: (v: number) => {
+                updatePreferences({ focusMinutes: v });
+                if (pomodoroPhase === 'focus') setMode('pomodoro', v);
+              },
+            },
+            {
+              label: 'Break',
+              value: preferences.shortBreakMinutes,
+              min: 1,
+              max: 60,
+              step: 1,
+              onChange: (v: number) => {
+                updatePreferences({ shortBreakMinutes: v });
+                if (pomodoroPhase === 'short_break') setMode('pomodoro', v);
+              },
+            },
+            {
+              label: 'Long',
+              value: preferences.longBreakMinutes,
+              min: 1,
+              max: 90,
+              step: 5,
+              onChange: (v: number) => {
+                updatePreferences({ longBreakMinutes: v });
+                if (pomodoroPhase === 'long_break') setMode('pomodoro', v);
+              },
+            },
+          ].map((item) => (
+            <div key={item.label} className="flex items-center gap-1 px-2.5 py-0.5 sm:px-3.5">
+              <span className="text-neutral-400">{item.label}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  item.onChange(Math.max(item.min, item.value - item.step))
+                }
+                className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+                title={`Decrease ${item.label}`}
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <span className="font-mono-timer min-w-[2rem] text-center font-medium text-neutral-900">
+                {item.value}m
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  item.onChange(Math.min(item.max, item.value + item.step))
+                }
+                className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+                title={`Increase ${item.label}`}
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Circular Minimal Clock */}
-      <div className="relative flex h-[288px] w-[288px] items-center justify-center">
+      <div
+        onClick={status === 'completed' ? reset : undefined}
+        role={status === 'completed' ? 'button' : undefined}
+        tabIndex={status === 'completed' ? 0 : undefined}
+        onKeyDown={
+          status === 'completed'
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  reset();
+                }
+              }
+            : undefined
+        }
+        title={status === 'completed' ? 'Click to stop alarm' : undefined}
+        className={`relative flex h-[288px] w-[288px] items-center justify-center rounded-full ${
+          status === 'completed'
+            ? 'cursor-pointer transition-transform active:scale-[0.98]'
+            : ''
+        }`}
+      >
         {/* Looping Ripple Aura when time is up */}
         {status === 'completed' && (
           <>
@@ -306,6 +436,9 @@ export function TimerDisplay({
         )}
 
         <div className="relative z-10 flex flex-col items-center justify-center">
+          <span className="mb-1.5 text-[10px] font-medium tracking-[0.2em] text-neutral-400 uppercase select-none">
+            {modeBadgeLabel}
+          </span>
           {isEditingTime ? (
             <input
               ref={inputRef}
@@ -327,8 +460,8 @@ export function TimerDisplay({
           ) : (
             <motion.button
               type="button"
-              onClick={startEditingTime}
-              disabled={!canEditTime}
+              onClick={status === 'completed' ? reset : startEditingTime}
+              disabled={!canEditTime && status !== 'completed'}
               animate={
                 status === 'completed'
                   ? { scale: [1, 1.05, 1] }
@@ -340,13 +473,15 @@ export function TimerDisplay({
                   : { duration: 0.2 }
               }
               title={
-                canEditTime
-                  ? 'Click to edit duration (e.g. 45 or 12:30)'
-                  : undefined
+                status === 'completed'
+                  ? 'Click to stop alarm'
+                  : canEditTime
+                    ? 'Click to edit duration (e.g. 45 or 12:30)'
+                    : undefined
               }
               className={`font-mono-timer text-5xl font-normal tracking-tight text-neutral-900 ${
                 status === 'completed'
-                  ? 'cursor-text rounded-lg px-2 transition hover:bg-neutral-100/80'
+                  ? 'cursor-pointer rounded-lg px-2'
                   : canEditTime
                     ? 'cursor-text rounded-lg px-2 transition hover:bg-neutral-100/80'
                     : 'cursor-default'
@@ -376,7 +511,15 @@ export function TimerDisplay({
               >
                 <BellRing className="h-3.5 w-3.5" />
               </motion.span>
-              <span>Time&apos;s Up!</span>
+              <span>
+                {mode === 'pomodoro'
+                  ? pomodoroPhase === 'focus'
+                    ? pomodoroRound >= 4
+                      ? 'Next: Long Break'
+                      : 'Next: Break'
+                    : 'Next: Focus'
+                  : "Time's Up!"}
+              </span>
             </motion.div>
           )}
 
@@ -423,37 +566,192 @@ export function TimerDisplay({
         </div>
       </div>
 
+      {/* Mode-Specific Quick Controls (borderless text with subtle hairline dividers) */}
+      <div className="flex min-h-[28px] items-center justify-center">
+        {(mode === 'focus' || mode === 'sleep') && status === 'idle' && (
+          <div className="inline-flex items-center divide-x divide-neutral-200/80">
+            {(mode === 'sleep' ? [15, 30, 45, 60, 90] : [5, 15, 25, 45, 60]).map((mins) => {
+              const active = plannedSeconds === mins * 60;
+              return (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => {
+                    if (mode === 'focus') updatePreferences({ focusMinutes: mins });
+                    setMode(mode, mins);
+                  }}
+                  className={`relative cursor-pointer px-3.5 py-0.5 text-xs tracking-wide transition-colors ${
+                    active
+                      ? 'font-semibold text-neutral-900'
+                      : 'font-normal text-neutral-400 hover:text-neutral-700'
+                  }`}
+                >
+                  {mins}m
+                  {active && (
+                    <span className="absolute -bottom-1 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-neutral-900" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {mode === 'pomodoro' && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5" title={`Round ${pomodoroRound} of 4`}>
+              {[1, 2, 3, 4].map((r) => (
+                <span
+                  key={r}
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                    r < pomodoroRound
+                      ? 'bg-neutral-900'
+                      : r === pomodoroRound
+                        ? 'bg-neutral-900 ring-2 ring-neutral-300'
+                        : 'bg-neutral-200'
+                  }`}
+                />
+              ))}
+            </div>
+            {status === 'idle' && (
+              <div className="inline-flex items-center divide-x divide-neutral-200/80 border-l border-neutral-200/80 pl-3">
+                {[
+                  { label: '25 / 5', f: 25, b: 5, l: 15 },
+                  { label: '50 / 10', f: 50, b: 10, l: 20 },
+                ].map((p) => {
+                  const active =
+                    preferences.focusMinutes === p.f &&
+                    preferences.shortBreakMinutes === p.b;
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => {
+                        updatePreferences({
+                          focusMinutes: p.f,
+                          shortBreakMinutes: p.b,
+                          longBreakMinutes: p.l,
+                        });
+                        setMode('pomodoro', p.f);
+                      }}
+                      className={`relative cursor-pointer px-3 py-0.5 text-xs tracking-wide transition-colors ${
+                        active
+                          ? 'font-semibold text-neutral-900'
+                          : 'font-normal text-neutral-400 hover:text-neutral-700'
+                      }`}
+                    >
+                      {p.label}
+                      {active && (
+                        <span className="absolute -bottom-1 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-neutral-900" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {mode === 'interval' && status === 'idle' && (
+          <div className="inline-flex items-center divide-x divide-neutral-200/80">
+            {[
+              { label: '45s / 15s × 8', w: 45, r: 15, n: 8 },
+              { label: '30s / 10s × 10', w: 30, r: 10, n: 10 },
+              { label: '20m / 5m × 4', w: 1200, r: 300, n: 4 },
+            ].map((p) => {
+              const active =
+                intervalWorkSeconds === p.w &&
+                intervalRestSeconds === p.r &&
+                intervalTotalRounds === p.n;
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setIntervalConfig(p.w, p.r, p.n)}
+                  className={`relative cursor-pointer px-3.5 py-0.5 text-xs tracking-wide transition-colors ${
+                    active
+                      ? 'font-semibold text-neutral-900'
+                      : 'font-normal text-neutral-400 hover:text-neutral-700'
+                  }`}
+                >
+                  {p.label}
+                  {active && (
+                    <span className="absolute -bottom-1 left-1/2 h-0.5 w-3 -translate-x-1/2 rounded-full bg-neutral-900" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Primary Action Controls */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         {status === 'completed' ? (
-          <>
-            <motion.button
-              type="button"
-              onClick={reset}
-              whileHover={{ scale: 1.04, y: -1 }}
-              whileTap={{ scale: 0.93, y: 1 }}
-              animate={{ scale: [1, 1.03, 1] }}
-              transition={{
-                scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' },
-                default: { type: 'spring', stiffness: 450, damping: 24 },
-              }}
-              className="flex h-14 cursor-pointer items-center gap-2.5 rounded-full bg-neutral-900 px-8 text-base font-semibold text-white shadow-md transition-colors hover:bg-neutral-800"
-            >
-              <BellOff className="h-5 w-5" />
-              <span>Stop Alarm</span>
-            </motion.button>
-            <motion.button
-              type="button"
-              onClick={onStart}
-              whileHover={{ scale: 1.05, y: -1 }}
-              whileTap={{ scale: 0.92, y: 1 }}
-              transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-              className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900"
-              title="Restart timer"
-            >
-              <Play className="h-5 w-5 translate-x-[1px]" />
-            </motion.button>
-          </>
+          mode === 'pomodoro' ? (
+            <>
+              <motion.button
+                type="button"
+                onClick={onStart}
+                whileHover={{ scale: 1.04, y: -1 }}
+                whileTap={{ scale: 0.93, y: 1 }}
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{
+                  scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' },
+                  default: { type: 'spring', stiffness: 450, damping: 24 },
+                }}
+                className="flex h-14 cursor-pointer items-center gap-2.5 rounded-full bg-neutral-900 px-8 text-base font-semibold text-white shadow-md transition-colors hover:bg-neutral-800"
+              >
+                <Play className="h-5 w-5 translate-x-[1px]" />
+                <span>
+                  {pomodoroPhase === 'focus'
+                    ? pomodoroRound >= 4
+                      ? 'Start Long Break'
+                      : 'Start Break'
+                    : 'Start Focus'}
+                </span>
+              </motion.button>
+              <motion.button
+                type="button"
+                onClick={reset}
+                whileHover={{ scale: 1.05, y: -1 }}
+                whileTap={{ scale: 0.92, y: 1 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 24 }}
+                className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900"
+                title="Stop Alarm"
+              >
+                <BellOff className="h-5 w-5" />
+              </motion.button>
+            </>
+          ) : (
+            <>
+              <motion.button
+                type="button"
+                onClick={reset}
+                whileHover={{ scale: 1.04, y: -1 }}
+                whileTap={{ scale: 0.93, y: 1 }}
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{
+                  scale: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' },
+                  default: { type: 'spring', stiffness: 450, damping: 24 },
+                }}
+                className="flex h-14 cursor-pointer items-center gap-2.5 rounded-full bg-neutral-900 px-8 text-base font-semibold text-white shadow-md transition-colors hover:bg-neutral-800"
+              >
+                <BellOff className="h-5 w-5" />
+                <span>Stop Alarm</span>
+              </motion.button>
+              <motion.button
+                type="button"
+                onClick={onStart}
+                whileHover={{ scale: 1.05, y: -1 }}
+                whileTap={{ scale: 0.92, y: 1 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 24 }}
+                className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900"
+                title="Restart timer"
+              >
+                <Play className="h-5 w-5 translate-x-[1px]" />
+              </motion.button>
+            </>
+          )
         ) : status === 'running' ? (
           <motion.button
             type="button"
@@ -480,6 +778,20 @@ export function TimerDisplay({
           </motion.button>
         )}
 
+        {mode === 'flow' && status === 'running' && (
+          <motion.button
+            type="button"
+            onClick={recordLap}
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.9, y: 1 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 24 }}
+            className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-sky-500 hover:bg-sky-500 hover:text-white"
+            title="Record Lap"
+          >
+            <Flag className="h-5 w-5" />
+          </motion.button>
+        )}
+
         {mode === 'flow' && (status === 'running' || status === 'paused') && (
           <motion.button
             type="button"
@@ -487,7 +799,7 @@ export function TimerDisplay({
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.9, y: 1 }}
             transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-            className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-neutral-900 hover:bg-neutral-900 hover:text-white"
+            className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-emerald-600 hover:bg-emerald-600 hover:text-white"
             title="Finish session"
           >
             <Check className="h-5 w-5" />
@@ -501,7 +813,7 @@ export function TimerDisplay({
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.9, y: 1 }}
             transition={{ type: 'spring', stiffness: 450, damping: 24 }}
-            className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900"
+            className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-xs transition-colors hover:border-rose-500 hover:bg-rose-500 hover:text-white"
             title="Reset"
           >
             <RotateCcw className="h-5 w-5" />
@@ -517,7 +829,7 @@ export function TimerDisplay({
           className={`flex h-14 cursor-pointer items-center gap-2 rounded-full border px-6 text-base font-medium shadow-xs transition-colors ${
             isPipOpen
               ? 'border-neutral-900 bg-neutral-900 text-white'
-              : 'border-neutral-300 bg-white text-neutral-800 hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900'
+              : 'border-neutral-300 bg-white text-neutral-800 hover:border-amber-500 hover:bg-amber-500 hover:text-white'
           }`}
           title={isPipOpen ? 'Close Pop-up mode' : 'Open Pop-up mode'}
         >
@@ -525,6 +837,28 @@ export function TimerDisplay({
           <span>Pop-up</span>
         </motion.button>
       </div>
+
+      {/* Stopwatch Laps List */}
+      {mode === 'flow' && laps.length > 0 && (
+        <div className="minimal-scroll max-h-36 w-full max-w-xs space-y-1 overflow-y-auto rounded-2xl border border-neutral-200/70 bg-white/80 p-2.5 text-xs">
+          {laps.map((lap) => (
+            <div
+              key={lap.id}
+              className="flex items-center justify-between rounded-xl px-2.5 py-1.5 text-neutral-600 odd:bg-neutral-50/70"
+            >
+              <span className="font-medium text-neutral-400">
+                Lap {lap.lapNumber}
+              </span>
+              <span className="font-mono-timer text-neutral-500">
+                +{formatStopwatchMs(lap.splitMs)}
+              </span>
+              <span className="font-mono-timer font-medium text-neutral-900">
+                {formatStopwatchMs(lap.totalMs)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
